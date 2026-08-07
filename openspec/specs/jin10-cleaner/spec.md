@@ -2,9 +2,31 @@
 
 ## Purpose
 
-金十数据（www.jin10.com）浏览器增强用户脚本：移除推广/广告元素（广告减负），并为每条免费公开快讯提供可选的 DeepSeek AI 解读（AI 解读）。所有能力默认开启但各自独立可关。
+浏览器增强用户脚本：在金十数据（www.jin10.com）、汇通网 7x24 快讯（www.fx678.com/kx）、财联社电报（www.cls.cn/telegraph）上移除推广/广告元素（广告减负），并为每条免费公开快讯提供可选的 DeepSeek AI 解读（AI 解读）。所有能力默认开启但各自独立可关。未匹配的站点完全静默（不注入任何元素、不报错）。
 
 ## Requirements
+
+### ADDED Requirement: 多站配置分发
+
+脚本 SHALL 通过 `PAGE_CONFIGS` 配置表按 hostname 后缀匹配站点（`jin10.com` / `fx678.com` / `cls.cn`），每站独立配置：广告选择器与 CSS、快讯条目选择器、时间元素选择器、文本提取排除/限定选择器、设置入口方式（导航挂载或 fixed 按钮回退）。`getPageConfig()` 未命中站点时 SHALL 直接 return，不注入任何能力。
+
+- **设置与存储全局共享**：API Key / 开关 / 模型 / 思考档位共用 `j10_*` GM 存储；AI 解读缓存（`j10_ai_cache`）跨站共用（按文本内容天然去重）
+- **边界**：不得触碰付费内容（金十 VIP / 汇通 VIP / 财联社电报付费标记）
+
+#### Scenario: 未适配站点完全静默
+
+- **WHEN** 用户打开未在 `@match` 与配置表中的站点
+- **THEN** 页面无任何脚本注入痕迹，控制台无报错
+
+#### Scenario: 汇通网 kx 页三能力可用
+
+- **WHEN** 用户加载 https://www.fx678.com/kx
+- **THEN** 广告（`.box_right` 漂浮层、`.body_zb__adv` 快讯流广告、`.kfk` 悬浮客服、`[id^="hta_"]` 广告位）被清除；每条 `li.body_zb_li[id^="newsid"]` / `li.inter_content_li[id^="topnewsid"]` 快讯时间下方出现 AI 按钮且点击可用；顶部导航 `#nav` 末尾出现 ⚙️AI 入口
+
+#### Scenario: 财联社 telegraph 页三能力可用
+
+- **WHEN** 用户加载 https://www.cls.cn/telegraph
+- **THEN** 广告（`img[src*="app-banner"]` 推广横幅、`.sidebar-image-box` 悬浮二维码 ×4）被清除；每条电报条目（`.w-894` 内 `div.p-t-20.p-b-20.b-b-w-1`）时间后出现 AI 按钮且点击可用；右下角出现 fixed ⚙️AI 圆形按钮（无导航可挂载）
 
 ### ADDED Requirement: 广告减负
 
@@ -61,6 +83,6 @@
 
 ## Requirements Traceability
 
-- 广告减负：实测 4 类元素全部清除（puppeteer，1080P/4K）
-- AI 解读：29/29 快讯按钮注入；真实 API 调用成功（`finish_reason: stop`，单条约 430 token）
-- 设置入口：1080P/4K 导航注入、菜单可见性（elementFromPoint 命中）、toggle 循环实测通过
+- 广告减负：金十 4 类元素全部清除；汇通 kx 广告选择器命中即清除；财联社 5 处（横幅 1 + 二维码 4）全部清除（Playwright + Edge headless 实测）
+- AI 解读：金十 29/29 快讯按钮注入；汇通 180/204（数据快讯等无正文条目标记跳过）；财联社 20/20 电报按钮注入；真实 API 调用成功（`finish_reason: stop`，单条约 430 token）
+- 设置入口：金十/汇通导航注入可用；财联社 fixed 按钮回退可用；菜单可见性、toggle 循环实测通过

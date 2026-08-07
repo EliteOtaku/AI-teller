@@ -1,11 +1,14 @@
 // ==UserScript==
-// @name         金十数据净化 + AI 解读（DeepSeek）
+// @name         财经快讯净化 + AI 解读（DeepSeek）
 // @namespace    jin10-cleaner
-// @version      2.1.0
-// @description  金十数据：①广告减负（去广告/App推广/开通弹窗）②AI 解读（DeepSeek，点击按钮才调用，思考强度可调）。不触碰任何付费内容。
+// @version      2.2.0
+// @description  金十数据 / 汇通网 / 财联社：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek，点击按钮才调用，思考强度可调）。不触碰任何付费内容。
 // @match        https://www.jin10.com/*
 // @match        https://xnews.jin10.com/*
 // @match        https://rili.jin10.com/*
+// @match        https://www.fx678.com/kx*
+// @match        https://www.cls.cn/telegraph*
+// @match        https://cls.cn/telegraph*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -52,36 +55,108 @@
   CONFIG.reasoningEffort = GM_getValue('j10_effort', CONFIG.reasoningEffort);
 
   // ============================================================
-  // 一、广告减负（CSS 层先隐藏，避免闪动）
+  // 多站配置表（key 为 hostname 后缀，子域名共享配置）
   // ============================================================
-  var AD_CSS = [
-    '.download-container, .download-bar { display: none !important; }',
-    '.qr-slide, .common-nav-slide { display: none !important; }',
-    '.desktop-tip { display: none !important; }',
-    '.jin-plus-open-dialog, .jin-plus-open-dialog__container { display: none !important; }',
-    '.poster, .poster-container, .poster-wrap, [class*="poster-layer"] { display: none !important; }'
-  ].join('\n');
+  var PAGE_CONFIGS = {
+    // ---------- 金十数据（www / xnews / rili） ----------
+    'jin10.com': {
+      // 广告：CSS 层先隐藏，避免闪动
+      adCss: [
+        '.download-container, .download-bar { display: none !important; }',
+        '.qr-slide, .common-nav-slide { display: none !important; }',
+        '.desktop-tip { display: none !important; }',
+        '.jin-plus-open-dialog, .jin-plus-open-dialog__container { display: none !important; }',
+        '.poster, .poster-container, .poster-wrap, [class*="poster-layer"] { display: none !important; }'
+      ],
+      adSelectors: ['.download-container, .download-bar', '.qr-slide, .common-nav-slide',
+        '.desktop-tip', '.jin-plus-open-dialog'],
+      // 开屏广告（poster）通过移除 header 属性处理
+      hasPosterHeader: true,
+      // 快讯条目 / 时间 / 文本提取排除项
+      itemSelector: '.jin-flash-item-container[id^="flash"], .jin-flash-item.flash',
+      timeSelector: '.item-time',
+      flashDropSelectors: '.jin-flash-date-line, .flash-time, .jin-flash-date, .flash-tags, .detail-btn, .share-tools-popover',
+      // 设置入口：挂顶部导航（Vue scoped 样式需要复用 data-v-* 属性）
+      navSelector: '.left-navs .navs-item',
+      gearClass: 'navs-item cnzz-tg is-normal',
+      gearAttrs: { 'data-v-179737e5': '' },
+      gearInnerClass: 'glass-effect-btn'
+    },
 
+    // ---------- 汇通网 7x24 快讯（服务端渲染 + socket 追加） ----------
+    'fx678.com': {
+      adCss: [
+        '.kfk { display: none !important; }',
+        '.box_right { display: none !important; }',
+        '[id^="hta_"] { display: none !important; }',
+        '.body_zb__adv { display: none !important; }'
+      ],
+      adSelectors: ['.kfk', '.box_right', '[id^="hta_"]', '.body_zb__adv'],
+      // 普通快讯 + 置顶快讯
+      itemSelector: 'li.body_zb_li[id^="newsid"], li.inter_content_li[id^="topnewsid"]',
+      timeSelector: '.zb_time a, .fb_time',
+      // 排除时间/国旗/数据指标/市场影响/评论按钮等非正文元素；正文限定在标题链接 span 内
+      flashDropSelectors: '.zb_time, .fb_time, .zb_flag, .zb_star, .zb_more, .comment-btn, .history_btn, .kx-quote, .more_end2, .link_img, .fa-caret-right, .fb_content',
+      textIncludeSelector: 'a[id^="aid"] span, .top_tit a',
+      // 设置入口：挂顶部导航 ul#nav 末尾
+      navSelector: '#nav li'
+    },
+
+    // ---------- 财联社 7x24 电报（Next.js 客户端渲染，原子类） ----------
+    'cls.cn': {
+      adCss: [
+        '.sidebar-image-box { display: none !important; }',
+        'img[src*="app-banner"] { display: none !important; }'
+      ],
+      adSelectors: ['.sidebar-image-box', 'img[src*="app-banner"]'],
+      // 条目：列表容器 .w-894 内以下边框分隔的块（无语义类名，限定作用域防误命中）
+      itemSelector: '.w-894 div.p-t-20.p-b-20.b-b-w-1.b-b-s-s.b-c-e6e7ea',
+      // 时间：红色粗体内联样式 span
+      timeSelector: 'span[style*="rgb(222, 4, 34)"]',
+      // 排除时间 span / 话题标签 / 评论 / 分享（含 canvas 海报）/ 底部行
+      flashDropSelectors: 'span[style*="rgb(222, 4, 34)"], a[href^="/subject/"], a[href^="/detail/"], .share-box, canvas, .c-b.f-s-12',
+      textIncludeSelector: 'div[style*="white-space: pre-wrap"]',
+      // 导航不适合挂载 → 回退 fixed ⚙ 按钮（不配置 navSelector）
+      useFixedGear: true
+    }
+  };
+
+  // 按 hostname 后缀匹配站点配置；未匹配返回 null（全部能力静默跳过）
+  function getPageConfig() {
+    var host = location.hostname;
+    for (var key in PAGE_CONFIGS) {
+      if (host === key || host.slice(-key.length - 1) === '.' + key) return PAGE_CONFIGS[key];
+    }
+    return null;
+  }
+
+  var SITE = getPageConfig();
+  if (!SITE) return; // 未适配站点：完全静默，不注入任何东西
+
+  // ============================================================
+  // 一、广告减负
+  // ============================================================
   function injectCss() {
     var style = document.createElement('style');
     style.id = 'jin10-cleaner-css';
-    style.textContent = AD_CSS;
+    style.textContent = SITE.adCss.join('\n');
     (document.head || document.documentElement).appendChild(style);
   }
 
   function removeAds() {
     if (!CONFIG.removeAds) return;
-    var sels = ['.download-container, .download-bar', '.qr-slide, .common-nav-slide',
-      '.desktop-tip', '.jin-plus-open-dialog'];
+    var sels = SITE.adSelectors;
     for (var i = 0; i < sels.length; i++) {
       var els = document.querySelectorAll(sels[i]);
       for (var j = 0; j < els.length; j++) els[j].remove();
     }
-    var header = document.querySelector('.jin-header');
-    if (header) {
-      header.removeAttribute('poster-src');
-      header.removeAttribute('poster-link');
-      header.setAttribute('poster-id', '0');
+    if (SITE.hasPosterHeader) {
+      var header = document.querySelector('.jin-header');
+      if (header) {
+        header.removeAttribute('poster-src');
+        header.removeAttribute('poster-link');
+        header.setAttribute('poster-id', '0');
+      }
     }
   }
 
@@ -106,12 +181,22 @@
     } catch (e) { /* ignore */ }
   }
 
-  // 提取单条快讯纯文本（排除时间/标签/按钮）
+  // 提取单条快讯纯文本（排除时间/标签/按钮等非正文元素）
   function extractFlashText(item) {
     var clone = item.cloneNode(true);
-    var drop = clone.querySelectorAll('.jin-flash-date-line, .flash-time, .jin-flash-date, .flash-tags, .detail-btn, .share-tools-popover, .j10-ai-btn, .j10-ai-box');
+    var drop = clone.querySelectorAll(SITE.flashDropSelectors);
     for (var i = 0; i < drop.length; i++) drop[i].remove();
-    var text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    var text = '';
+    if (SITE.textIncludeSelector) {
+      // 站点正文结构不统一时，限定取正文元素内第一个非空文本
+      var inc = clone.querySelectorAll(SITE.textIncludeSelector);
+      for (var j = 0; j < inc.length; j++) {
+        var t = (inc[j].textContent || '').replace(/\s+/g, ' ').trim();
+        if (t) { text = t; break; }
+      }
+    } else {
+      text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
     return text.length > 500 ? text.slice(0, 500) + '…' : text;
   }
 
@@ -217,8 +302,8 @@
       });
     };
     wrap.appendChild(btn);
-    // 固定在时间正下方：插到 .item-time 之后紧贴（找不到时间元素则插到条目内容之前）
-    var timeEl = item.querySelector('.item-time');
+    // 固定在时间正下方：插到时间元素之后紧贴（找不到时间元素则插到条目内容之前）
+    var timeEl = item.querySelector(SITE.timeSelector);
     if (timeEl && timeEl.nextSibling) {
       timeEl.parentNode.insertBefore(wrap, timeEl.nextSibling);
     } else if (timeEl) {
@@ -242,28 +327,39 @@
   }
 
   // ============================================================
-  // 三、设置入口（顶部导航"数据"后的 ⚙️AI，点击向下展开菜单）
+  // 三、设置入口（导航项 ⚙️AI；无导航配置时回退 fixed 右下角按钮）
   // ============================================================
+  function toggleMenu(gear) {
+    var menu = document.getElementById('j10-menu');
+    if (menu) { menu.remove(); return false; }
+    buildMenu(gear);
+    return true;
+  }
+
   function addSettings() {
     // 幂等：已注入则跳过（SPA 重新渲染导航时由 MutationObserver 重试）
     if (document.getElementById('j10-gear-nav')) return;
+    if (document.getElementById('j10-gear-fixed')) return;
 
-    var navs = document.querySelectorAll('.left-navs .navs-item');
-    if (!navs.length) return; // 桌面导航未渲染（窄屏/移动端布局）时静默跳过
+    if (SITE.useFixedGear) { addFixedGear(); return; }
 
-    // 在导航末尾（"数据"后）追加入口，结构与 navs-item 一致，粗体 ⚙️AI
-    // 注意：必须用 span 而非 <a href="javascript:void(0)">——实测 a 的点击会触发
+    var navs = document.querySelectorAll(SITE.navSelector);
+    if (!navs.length) return; // 导航未渲染（窄屏/移动端布局）时静默跳过，等待重试
+
+    // 在导航末尾追加入口，结构与 navs-item 一致，粗体 ⚙️AI
+    // 注意：必须用 span 而非 <a href="javascript:void(0)">——金十实测 a 的点击会触发
     // Vue 导航组件重渲染，把入口和菜单整棵删除（表现为菜单闪现后消失）
     var gear = document.createElement('span');
     gear.id = 'j10-gear-nav';
-    gear.className = 'navs-item cnzz-tg is-normal';
-    gear.title = '金十净化设置';
-    // 站点导航为 Vue scoped 样式（data-v-*），动态节点拿不到类样式，用 inline 兜底布局
-    gear.setAttribute('data-v-179737e5', '');
+    gear.title = '财经快讯净化设置';
+    if (SITE.gearClass) gear.className = SITE.gearClass;
+    var attrs = SITE.gearAttrs || {};
+    for (var a in attrs) gear.setAttribute(a, attrs[a]);
+    // 站点导航多为 scoped 样式，动态节点拿不到类样式，用 inline 兜底布局
     gear.style.cssText = 'position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;text-decoration:none;';
     var span = document.createElement('span');
-    span.className = 'glass-effect-btn';
-    span.setAttribute('data-v-179737e5', '');
+    if (SITE.gearInnerClass) span.className = SITE.gearInnerClass;
+    for (var a2 in attrs) span.setAttribute(a2, attrs[a2]);
     span.style.cssText = 'display:flex;align-items:center;height:32px;padding:0 12px;font-weight:700;font-size:15px;color:rgba(0,0,0,0.8);';
     span.textContent = '⚙️AI';
     gear.appendChild(span);
@@ -271,37 +367,52 @@
 
     gear.onclick = function (e) {
       e.preventDefault();
-      var menu = document.getElementById('j10-menu');
-      if (menu) { menu.remove(); setNavActive(false); return; }
-      buildMenu(gear, setNavActive);
-      setNavActive(true);
-    };
-
-    function setNavActive(active) {
-      if (active) gear.classList.add('is-active');
+      var opened = toggleMenu(gear);
+      if (opened) gear.classList.add('is-active');
       else gear.classList.remove('is-active');
-    }
+    };
+  }
+
+  // 无导航容器的站点：固定右下角圆形按钮
+  function addFixedGear() {
+    var gear = document.createElement('div');
+    gear.id = 'j10-gear-fixed';
+    gear.textContent = '⚙️AI';
+    gear.title = '财经快讯净化设置';
+    gear.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999999;width:46px;height:46px;line-height:46px;text-align:center;border-radius:50%;background:#1677ff;color:#fff;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.25);';
+    gear.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMenu(gear);
+    };
+    document.body.appendChild(gear);
   }
 
   // 构建设置菜单：挂到 document.body 用 fixed 定位（脱离导航容器）
-  // 关键：导航祖先 .jin-nav_pc_left 有 overflow:hidden，菜单若挂在导航内会被裁切不可见；
+  // 关键：金十导航祖先 .jin-nav_pc_left 有 overflow:hidden，菜单若挂在导航内会被裁切不可见；
   // 挂 body + fixed 定位同时摆脱 Vue 重渲染删除与容器裁切两个问题
-  function buildMenu(anchor, setNavActive) {
+  function buildMenu(anchor) {
     var menu = document.createElement('div');
     menu.id = 'j10-menu';
     menu.style.cssText = 'position:fixed;z-index:999999;width:290px;padding:14px;background:#fff;border:1px solid #e5e5e5;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);font-size:13px;color:#333;';
-    // 锚定在入口正下方（fixed 定位基于视口坐标）；靠右时 clamp 防溢出视口
+    // 锚定在入口正下方（fixed 定位基于视口坐标）；靠右时 clamp 防溢出视口；
+    // 入口贴近视口底部（如右下角 fixed 按钮）时改为向上展开，避免菜单被视口裁切
     var r = anchor.getBoundingClientRect();
     var left = r.left;
     if (left + 290 > window.innerWidth - 8) left = window.innerWidth - 290 - 8;
-    menu.style.top = (r.bottom + 6) + 'px';
+    var top = r.bottom + 6;
+    if (top + 460 > window.innerHeight - 8) {
+      top = Math.max(8, r.top - 460 - 6);
+    }
+    menu.style.top = top + 'px';
     menu.style.left = left + 'px';
     // 滚动时关闭菜单（防与入口错位；导航若改版为非固定定位时仍可靠）
-    // 用 capture 阶段监听：金十的滚动容器可能是内部元素而非 window
+    // 用 capture 阶段监听：站点的滚动容器可能是内部元素而非 window
     var onScroll = function () {
       if (menu.isConnected) {
         menu.remove();
-        if (setNavActive) setNavActive(false);
+        var g = document.getElementById('j10-gear-nav');
+        if (g) g.classList.remove('is-active');
       }
       window.removeEventListener('scroll', onScroll, true);
     };
@@ -314,7 +425,7 @@
         (effortOptions[i] === 'disabled' ? '关闭思考（快速）' : effortOptions[i]) + '</option>';
     }
     menu.innerHTML =
-      '<div style="font-weight:600;margin-bottom:10px;">金十净化设置</div>' +
+      '<div style="font-weight:600;margin-bottom:10px;">财经快讯净化设置</div>' +
       '<label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><input type="checkbox" id="j10-opt-ads"' + (CONFIG.removeAds ? ' checked' : '') + '> 广告减负</label>' +
       '<label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><input type="checkbox" id="j10-opt-ai"' + (CONFIG.enableAI ? ' checked' : '') + '> AI 解读（点击按钮才调用）</label>' +
       '<div style="margin-bottom:6px;">DeepSeek API Key（<a href="https://platform.deepseek.com" target="_blank" style="color:#1677ff;">platform.deepseek.com</a>）：</div>' +
@@ -327,7 +438,7 @@
       '<div style="display:flex;gap:8px;"><button id="j10-save" style="flex:1;padding:6px;background:#1677ff;color:#fff;border:none;border-radius:4px;cursor:pointer;">保存</button>' +
       '<button id="j10-clear-key" style="flex:1;padding:6px;background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;border-radius:4px;cursor:pointer;">清空 Key</button>' +
       '<button id="j10-close" style="flex:1;padding:6px;background:#fafafa;color:#555;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;">关闭</button></div>' +
-      '<div style="margin-top:10px;color:#999;font-size:12px;">说明：广告减负移除推广/弹窗；AI 解读仅针对免费公开快讯，点击按钮才消耗 API 额度。不解锁任何付费内容。</div>';
+      '<div style="margin-top:10px;color:#999;font-size:12px;">说明：广告减负移除推广/弹窗；AI 解读仅针对免费公开快讯，点击按钮才消耗 API 额度。支持金十数据 / 汇通网 / 财联社，不解锁任何付费内容。</div>';
     document.body.appendChild(menu);
 
     // Key 不回显完整值：掩码提示已配置；输入框留空表示保持不变
@@ -363,12 +474,10 @@
         for (var b = 0; b < oldBtns.length; b++) oldBtns[b].remove();
       }
       menu.remove();
-      if (setNavActive) setNavActive(false);
       attachToAllFlashes();
     };
     document.getElementById('j10-close').onclick = function () {
       menu.remove();
-      if (setNavActive) setNavActive(false);
     };
     // 清空 Key：立即生效并更新掩码提示
     document.getElementById('j10-clear-key').onclick = function () {
@@ -380,9 +489,9 @@
   }
 
   // ============================================================
-  // 四、主体：动态监听（快讯列表异步加载）
+  // 四、主体：动态监听（快讯列表异步加载 / socket 追加 / React 渲染）
   function attachToAllFlashes() {
-    var items = document.querySelectorAll('.jin-flash-item-container[id^="flash"], .jin-flash-item.flash');
+    var items = document.querySelectorAll(SITE.itemSelector);
     for (var i = 0; i < items.length; i++) {
       addAIButton(items[i]);
     }
@@ -405,7 +514,7 @@
         addSettings();
         attachToAllFlashes();
         // 入口被 SPA 重渲染删除时，清理孤儿菜单
-        if (!document.getElementById('j10-gear-nav')) {
+        if (!document.getElementById('j10-gear-nav') && !document.getElementById('j10-gear-fixed')) {
           var orphan = document.getElementById('j10-menu');
           if (orphan) orphan.remove();
         }
