@@ -30,7 +30,14 @@
 
 ## Task: 文档 + 版本
 
-- **Status:** In Progress
+- **Status:** Done
 - **Priority:** Medium
 - **Description:** 更新 spec 基线、README、bump 版本号
 - **Acceptance Criteria:** 文档同步、版本号更新
+
+## Task: 修复菜单被滚动误关（v3.7.1）
+
+- **Status:** Done
+- **Priority:** High
+- **Description:** 聚焦 key 输入框时浏览器自动滚动（scrollIntoView）先于 focus 事件触发，menuHasFocus 仍为 false，scroll capture 监听误关菜单。修复：滚动关闭延迟一帧（setTimeout 0）再检查焦点；focusout 用 relatedTarget 判断菜单内焦点切换；新增点击菜单外关闭兜底
+- **Acceptance Criteria:** 真机（Edge+暴力猴）验证：切 OpenCode Go → 聚焦 key → 滚动，菜单保持（M=true）；失焦后滚动仍可关闭菜单

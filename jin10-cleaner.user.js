@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         财经快讯净化 + AI 解读（多 LLM）
 // @namespace    jin10-cleaner
-// @version      3.7.0
+// @version      3.7.1
 // @description  金十数据 / 汇通网 / 财联社：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek/OpenCode Go/OpenAI/Claude/Kimi/GLM/MiniMax/MiMo 多供应商切换，点击按钮才调用）。不触碰任何付费内容。
 // @match        https://www.jin10.com/*
 // @match        https://xnews.jin10.com/*
@@ -556,15 +556,39 @@
     menu.style.left = left + 'px';
     // 滚动时关闭菜单（防与入口错位；导航若改版为非固定定位时仍可靠）
     // 用 capture 阶段监听：站点的滚动容器可能是内部元素而非 window
-    var onScroll = function () {
+    // 焦点保护：用户正在菜单内交互（输入/选择/粘贴）时，滚动不关闭菜单——
+    // 否则财联社等实时滚动页面在聚焦输入框/粘贴时菜单会被误关
+    var menuHasFocus = false;
+    menu.addEventListener('focusin', function () { menuHasFocus = true; });
+    menu.addEventListener('focusout', function (e) {
+      // 新焦点仍在菜单内（点击菜单内另一元素）时保持 true
+      if (e.relatedTarget && menu.contains(e.relatedTarget)) return;
+      menuHasFocus = false;
+    });
+    var closeMenu = function () {
       if (menu.isConnected) {
         menu.remove();
         var g = document.getElementById('j10-gear-nav');
         if (g) g.classList.remove('is-active');
       }
       window.removeEventListener('scroll', onScroll, true);
+      document.removeEventListener('mousedown', onDocMouseDown, true);
+    };
+    var onScroll = function () {
+      // 延迟一帧再判断：聚焦输入框触发的浏览器自动滚动（scrollIntoView）
+      // 发生在 focus 事件派发之前，立即检查会误判 menuHasFocus=false 而误关菜单；
+      // 下一帧时 focusin 已派发，菜单内交互中则跳过关闭
+      setTimeout(function () {
+        if (menuHasFocus) return;
+        closeMenu();
+      }, 0);
     };
     window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    // 点击菜单外部时关闭（弥补焦点保护下滚动关闭的盲区）
+    var onDocMouseDown = function (e) {
+      if (menu.isConnected && !menu.contains(e.target)) closeMenu();
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
     var effortOptions = ['disabled', 'low', 'high', 'max'];
     var effortHtml = '';
     for (var i = 0; i < effortOptions.length; i++) {
