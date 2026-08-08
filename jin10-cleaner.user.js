@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         财经快讯净化 + AI 解读（DeepSeek）
+// @name         财经快讯净化 + AI 解读（多 LLM）
 // @namespace    jin10-cleaner
-// @version      2.2.0
-// @description  金十数据 / 汇通网 / 财联社：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek，点击按钮才调用，思考强度可调）。不触碰任何付费内容。
+// @version      3.7.0
+// @description  金十数据 / 汇通网 / 财联社：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek/OpenCode Go/OpenAI/Claude/Kimi/GLM/MiniMax/MiMo 多供应商切换，点击按钮才调用）。不触碰任何付费内容。
 // @match        https://www.jin10.com/*
 // @match        https://xnews.jin10.com/*
 // @match        https://rili.jin10.com/*
@@ -13,6 +13,13 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      api.deepseek.com
+// @connect      opencode.ai
+// @connect      api.openai.com
+// @connect      api.anthropic.com
+// @connect      api.moonshot.cn
+// @connect      open.bigmodel.cn
+// @connect      api.minimax.chat
+// @connect      api.xiaomimimo.com
 // @run-at       document-start
 // @license      MIT
 // ==/UserScript==
@@ -28,9 +35,11 @@
     removeAds: true,
     // AI 解读：默认开启（点击每条快讯旁的按钮才调用）
     enableAI: true,
-    // 模型（官方：deepseek-v4-flash / deepseek-v4-pro）
+    // 当前 LLM 供应商（对应 PROVIDERS 的 key）
+    provider: 'deepseek',
+    // 模型（默认 deepseek-v4-flash）
     model: 'deepseek-v4-flash',
-    // 思考强度：disabled / low / high / max（flash 支持三档，默认 low 足够）
+    // 思考强度：disabled / low / high / max（仅支持思考参数的 provider 生效）
     reasoningEffort: 'low',
     // 单条解读最大输出 token（思考模式会消耗大量 token，必须给足余量）
     maxTokens: 4000,
@@ -38,9 +47,60 @@
     cacheLimit: 300
   };
 
+  // ============================================================
+  // LLM 供应商配置表
+  // protocol: 'openai'（/chat/completions + Bearer）或 'anthropic'（/v1/messages + x-api-key）
+  // thinking: 'deepseek'（thinking:{type,reasoning_effort}）/ 'openai'（reasoning_effort）/
+  //           'anthropic'（thinking:{type,budget_tokens}）/ 'none'（不发送思考参数）
+  // ============================================================
+  var PROVIDERS = {
+    deepseek: {
+      name: 'DeepSeek', protocol: 'openai', baseURL: 'https://api.deepseek.com',
+      keyPlaceholder: 'sk-...', keyHint: 'platform.deepseek.com', thinking: 'deepseek',
+      models: ['deepseek-v4-flash', 'deepseek-v4-pro']
+    },
+    opencodego: {
+      name: 'OpenCode Go', protocol: 'openai', baseURL: 'https://opencode.ai/zen/go/v1',
+      keyPlaceholder: 'oc-...', keyHint: 'opencode.ai/auth', thinking: 'none',
+      models: ['deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3', 'kimi-k2.7-code',
+        'kimi-k2.6', 'glm-5.2', 'glm-5.1', 'mimo-v2.5', 'mimo-v2.5-pro',
+        'minimax-m3', 'minimax-m2.7', 'grok-4.5', 'hy3']
+    },
+    openai: {
+      name: 'OpenAI', protocol: 'openai', baseURL: 'https://api.openai.com/v1',
+      keyPlaceholder: 'sk-...', keyHint: 'platform.openai.com', thinking: 'openai',
+      models: ['gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'o3-mini']
+    },
+    anthropic: {
+      name: 'Anthropic Claude', protocol: 'anthropic', baseURL: 'https://api.anthropic.com/v1',
+      keyPlaceholder: 'sk-ant-...', keyHint: 'console.anthropic.com', thinking: 'anthropic',
+      models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5']
+    },
+    kimi: {
+      name: 'Kimi (Moonshot)', protocol: 'openai', baseURL: 'https://api.moonshot.cn/v1',
+      keyPlaceholder: 'sk-...', keyHint: 'platform.moonshot.cn', thinking: 'none',
+      models: ['kimi-k2-0711-preview', 'kimi-k2-turbo-preview', 'kimi-latest']
+    },
+    glm: {
+      name: '智谱 GLM', protocol: 'openai', baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+      keyPlaceholder: 'id.secret', keyHint: 'open.bigmodel.cn', thinking: 'none',
+      models: ['glm-4.6', 'glm-4.5', 'glm-4.5-air']
+    },
+    minimax: {
+      name: 'MiniMax', protocol: 'openai', baseURL: 'https://api.minimax.chat/v1',
+      keyPlaceholder: 'eyJ...', keyHint: 'platform.minimaxi.com', thinking: 'none',
+      models: ['MiniMax-Text-01', 'MiniMax-M2']
+    },
+    mimo: {
+      name: '小米 MiMo', protocol: 'openai', baseURL: 'https://api.xiaomimimo.com/v1',
+      keyPlaceholder: 'sk-...', keyHint: 'platform.xiaomimimo.com', thinking: 'none',
+      models: ['MiMo-7B']
+    }
+  };
+
   // 内置默认 API Key：仅首次运行时 seed 到 GM 存储（页面 JS 读不到），
   // 之后一律以 GM 存储为准——用户清空即彻底停用，不会回退到内置 key
-  var DEFAULT_API_KEY = ''; // 公开仓库版不含 Key：安装后在 ⚙️AI 设置中填入自己的 DeepSeek API Key
+  var DEFAULT_API_KEY = ''; // 公开仓库版不含 Key：安装后在 ⚙️AI 设置中填入自己的 API Key
 
   CONFIG.removeAds = GM_getValue('j10_removeAds', true);
   CONFIG.enableAI = GM_getValue('j10_enableAI', true);
@@ -50,8 +110,22 @@
       GM_setValue('j10_apiKey', DEFAULT_API_KEY);
     }
   }
-  CONFIG.apiKey = GM_getValue('j10_apiKey', '') || '';
-  CONFIG.model = GM_getValue('j10_model', CONFIG.model);
+  // 旧版存储迁移：j10_apiKey / j10_model → 按 provider 独立存储（j10_key_<id> / j10_model_<id>）
+  var legacyKey = GM_getValue('j10_apiKey', '');
+  if (legacyKey && !GM_getValue('j10_key_deepseek', '')) {
+    GM_setValue('j10_key_deepseek', legacyKey);
+    GM_setValue('j10_apiKey', '');
+  }
+  var legacyModel = GM_getValue('j10_model', '');
+  if (legacyModel && !GM_getValue('j10_model_deepseek', '')) {
+    GM_setValue('j10_model_deepseek', legacyModel);
+    GM_setValue('j10_model', '');
+  }
+  CONFIG.provider = GM_getValue('j10_provider', CONFIG.provider);
+  if (!PROVIDERS[CONFIG.provider]) CONFIG.provider = 'deepseek';
+  CONFIG.apiKey = GM_getValue('j10_key_' + CONFIG.provider, '') || '';
+  CONFIG.model = GM_getValue('j10_model_' + CONFIG.provider, '') ||
+    (PROVIDERS[CONFIG.provider].models[0] || CONFIG.model);
   CONFIG.reasoningEffort = GM_getValue('j10_effort', CONFIG.reasoningEffort);
 
   // ============================================================
@@ -209,28 +283,48 @@
   var BTN_STYLE_NORMAL = 'font-size:10px;font-weight:600;letter-spacing:0.5px;padding:0 5px;height:16px;line-height:14px;border:1px solid #c5c5c5;border-radius:3px;background:#f5f5f5;color:#888;cursor:pointer;margin:2px 0 0;';
   var BTN_STYLE_OPEN = 'font-size:10px;font-weight:600;letter-spacing:0.5px;padding:0 5px;height:16px;line-height:14px;border:1px solid #1677ff;border-radius:3px;background:#1677ff;color:#fff;cursor:pointer;margin:2px 0 0;';
 
-  // 思考模式参数：disabled 时关闭思考；否则启用并指定档位
-  function thinkingParam(effort) {
-    if (effort === 'disabled') return { type: 'disabled' };
-    return { type: 'enabled', reasoning_effort: effort || 'low' };
+  // 系统提示词（各协议共用）
+  var SYSTEM_PROMPT = '你是财经新闻解读助手。用户给你一条财经快讯，请用简体中文给出简明解读（250字以内）：1) 事件是什么；2) 对市场可能的影响（关联品种/资产）；3) 值得关注的后续信号。语气客观，不构成投资建议。';
+
+  // 思考参数按 provider 模式构造：
+  // 'deepseek' → thinking:{type,reasoning_effort}；'openai' → reasoning_effort；
+  // 'anthropic' → thinking:{type:'enabled',budget_tokens}；'none' → 不发送
+  function buildThinking(prov) {
+    var effort = CONFIG.reasoningEffort;
+    if (effort === 'disabled') return null;
+    if (prov.thinking === 'deepseek') {
+      return { type: 'enabled', reasoning_effort: effort };
+    }
+    if (prov.thinking === 'openai') {
+      return { reasoning_effort: effort };
+    }
+    if (prov.thinking === 'anthropic') {
+      return { type: 'enabled', budget_tokens: 2048 };
+    }
+    return null;
   }
 
-  function callDeepSeek(prompt, onDone, onError) {
+  // OpenAI 兼容协议：POST {baseURL}/chat/completions，Authorization: Bearer
+  function callOpenAI(prov, prompt, onDone, onError) {
     var payload = {
       model: CONFIG.model,
       messages: [
-        { role: 'system', content: '你是财经新闻解读助手。用户给你一条财经快讯，请用简体中文给出简明解读（250字以内）：1) 事件是什么；2) 对市场可能的影响（关联品种/资产）；3) 值得关注的后续信号。语气客观，不构成投资建议。' },
+        { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: prompt }
       ],
-      thinking: thinkingParam(CONFIG.reasoningEffort),
       max_tokens: CONFIG.maxTokens
     };
-    // 非思考模式可设温度；思考模式由模型自行控制
-    if (CONFIG.reasoningEffort === 'disabled') payload.temperature = 0.3;
+    var thinking = buildThinking(prov);
+    if (thinking) {
+      if (prov.thinking === 'openai') payload.reasoning_effort = thinking.reasoning_effort;
+      else payload.thinking = thinking;
+    } else {
+      payload.temperature = 0.3;
+    }
 
     GM_xmlhttpRequest({
       method: 'POST',
-      url: 'https://api.deepseek.com/chat/completions',
+      url: prov.baseURL + '/chat/completions',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + CONFIG.apiKey
@@ -254,6 +348,58 @@
       onerror: function () { onError('网络请求失败'); },
       ontimeout: function () { onError('请求超时（90s）'); }
     });
+  }
+
+  // Anthropic Messages 协议：POST {baseURL}/messages，x-api-key + anthropic-version
+  function callAnthropic(prov, prompt, onDone, onError) {
+    var messages = [{ role: 'user', content: prompt }];
+    var payload = {
+      model: CONFIG.model,
+      max_tokens: CONFIG.maxTokens,
+      system: SYSTEM_PROMPT,
+      messages: messages
+    };
+    var thinking = buildThinking(prov);
+    if (thinking) payload.thinking = thinking;
+
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: prov.baseURL + '/messages',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CONFIG.apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      data: JSON.stringify(payload),
+      timeout: 90000,
+      onload: function (res) {
+        try {
+          var json = JSON.parse(res.responseText);
+          if (json.error) {
+            onError((json.error.message || 'API 错误') + '（code: ' + (json.error.type || '?') + '）');
+            return;
+          }
+          // content 为数组（thinking/text 等 block），取最后一个 text block
+          if (json.content && json.content.length) {
+            var text = '';
+            for (var i = 0; i < json.content.length; i++) {
+              if (json.content[i].type === 'text' && json.content[i].text) text = json.content[i].text;
+            }
+            if (text) { onDone(text.trim()); return; }
+          }
+          onError('API 返回异常');
+        } catch (e) { onError('解析响应失败'); }
+      },
+      onerror: function () { onError('网络请求失败'); },
+      ontimeout: function () { onError('请求超时（90s）'); }
+    });
+  }
+
+  // 按当前 provider 协议分发
+  function callLLM(prompt, onDone, onError) {
+    var prov = PROVIDERS[CONFIG.provider] || PROVIDERS.deepseek;
+    if (prov.protocol === 'anthropic') callAnthropic(prov, prompt, onDone, onError);
+    else callOpenAI(prov, prompt, onDone, onError);
   }
 
   function addAIButton(item) {
@@ -281,16 +427,18 @@
         return;
       }
       if (!CONFIG.apiKey) {
-        showAIBox(wrap, '未配置 API Key：点击右下角 ⚙ 齿轮，在设置中填入 DeepSeek API Key。', false);
+        var provName = (PROVIDERS[CONFIG.provider] || {}).name || CONFIG.provider;
+        showAIBox(wrap, '未配置 API Key：点击右下角 ⚙ 齿轮，在设置中为「' + provName + '」填入 API Key。', false);
         return;
       }
-      // 缓存键包含思考档位，换档后不会读到旧结果
-      var cacheKey = text + '|' + (CONFIG.reasoningEffort === 'disabled' ? 'off' : CONFIG.reasoningEffort);
+      // 缓存键包含 provider + 模型 + 思考档位，切换后不会读到旧结果
+      var cacheKey = CONFIG.provider + '|' + CONFIG.model + '|' +
+        (CONFIG.reasoningEffort === 'disabled' ? 'off' : CONFIG.reasoningEffort) + '|' + text;
       var cache = cacheGet('j10_ai_cache', cacheKey);
       if (cache) { showAIBox(wrap, cache, true); return; }
       btn.disabled = true;
       btn.textContent = '…';
-      callDeepSeek(text, function (result) {
+      callLLM(text, function (result) {
         btn.disabled = false;
         btn.textContent = 'AI';
         cacheSet('j10_ai_cache', cacheKey, result);
@@ -424,27 +572,67 @@
         (CONFIG.reasoningEffort === effortOptions[i] ? ' selected' : '') + '>' +
         (effortOptions[i] === 'disabled' ? '关闭思考（快速）' : effortOptions[i]) + '</option>';
     }
+    // LLM 供应商下拉
+    var providerHtml = '';
+    for (var pid in PROVIDERS) {
+      providerHtml += '<option value="' + pid + '"' +
+        (CONFIG.provider === pid ? ' selected' : '') + '>' + PROVIDERS[pid].name + '</option>';
+    }
+    // 模型 datalist（按当前 provider 的预设模型列表）
+    var curProv = PROVIDERS[CONFIG.provider] || PROVIDERS.deepseek;
+    var modelOptionsHtml = '';
+    for (var mi = 0; mi < curProv.models.length; mi++) {
+      modelOptionsHtml += '<option value="' + curProv.models[mi] + '">';
+    }
     menu.innerHTML =
       '<div style="font-weight:600;margin-bottom:10px;">财经快讯净化设置</div>' +
       '<label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><input type="checkbox" id="j10-opt-ads"' + (CONFIG.removeAds ? ' checked' : '') + '> 广告减负</label>' +
       '<label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><input type="checkbox" id="j10-opt-ai"' + (CONFIG.enableAI ? ' checked' : '') + '> AI 解读（点击按钮才调用）</label>' +
-      '<div style="margin-bottom:6px;">DeepSeek API Key（<a href="https://platform.deepseek.com" target="_blank" style="color:#1677ff;">platform.deepseek.com</a>）：</div>' +
+      '<div style="margin-bottom:4px;">LLM 供应商：</div>' +
+      '<select id="j10-provider" style="width:100%;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;margin-bottom:8px;">' + providerHtml + '</select>' +
+      '<div id="j10-key-label" style="margin-bottom:6px;">API Key（<a id="j10-key-hint-link" href="https://platform.deepseek.com" target="_blank" style="color:#1677ff;">platform.deepseek.com</a>）：</div>' +
       '<input id="j10-key" type="password" placeholder="sk-..." style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;margin-bottom:8px;">' +
       '<div id="j10-key-mask" style="margin-bottom:8px;color:#999;font-size:12px;"></div>' +
       '<div style="margin-bottom:4px;">模型：</div>' +
-      '<input id="j10-model" type="text" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;margin-bottom:8px;">' +
+      '<input id="j10-model" type="text" list="j10-model-list" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;margin-bottom:8px;">' +
+      '<datalist id="j10-model-list">' + modelOptionsHtml + '</datalist>' +
       '<div style="margin-bottom:4px;">思考强度：</div>' +
       '<select id="j10-effort" style="width:100%;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;margin-bottom:10px;">' + effortHtml + '</select>' +
       '<div style="display:flex;gap:8px;"><button id="j10-save" style="flex:1;padding:6px;background:#1677ff;color:#fff;border:none;border-radius:4px;cursor:pointer;">保存</button>' +
       '<button id="j10-clear-key" style="flex:1;padding:6px;background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;border-radius:4px;cursor:pointer;">清空 Key</button>' +
       '<button id="j10-close" style="flex:1;padding:6px;background:#fafafa;color:#555;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;">关闭</button></div>' +
-      '<div style="margin-top:10px;color:#999;font-size:12px;">说明：广告减负移除推广/弹窗；AI 解读仅针对免费公开快讯，点击按钮才消耗 API 额度。支持金十数据 / 汇通网 / 财联社，不解锁任何付费内容。</div>';
+      '<div style="margin-top:10px;color:#999;font-size:12px;">说明：广告减负移除推广/弹窗；AI 解读仅针对免费公开快讯，点击按钮才消耗 API 额度。支持 DeepSeek / OpenCode Go / OpenAI / Claude / Kimi / GLM / MiniMax / MiMo，可切换供应商并各自独立保存 API Key。不解锁任何付费内容。</div>';
     document.body.appendChild(menu);
+
+    // 根据当前 provider 更新 Key 标签/占位符/掩码
+    function refreshProviderUI() {
+      var pid = document.getElementById('j10-provider').value;
+      var prov = PROVIDERS[pid] || PROVIDERS.deepseek;
+      var key = GM_getValue('j10_key_' + pid, '') || '';
+      var model = GM_getValue('j10_model_' + pid, '') || (prov.models[0] || '');
+      document.getElementById('j10-key-label').innerHTML = 'API Key（<a id="j10-key-hint-link" href="https://' + prov.keyHint + '" target="_blank" style="color:#1677ff;">' + prov.keyHint + '</a>）：';
+      document.getElementById('j10-key').placeholder = prov.keyPlaceholder;
+      var keyMask = document.getElementById('j10-key-mask');
+      if (key) {
+        keyMask.textContent = '当前已配置：' + key.slice(0, 5) + '****' + key.slice(-4);
+      } else {
+        keyMask.textContent = '未配置 Key，AI 解读不可用';
+      }
+      // 模型 datalist 更新为当前 provider 的预设
+      var opts = '';
+      for (var i2 = 0; i2 < prov.models.length; i2++) {
+        opts += '<option value="' + prov.models[i2] + '">';
+      }
+      document.getElementById('j10-model-list').innerHTML = opts;
+      document.getElementById('j10-model').value = model;
+    }
+    refreshProviderUI();
+    document.getElementById('j10-provider').onchange = refreshProviderUI;
 
     // Key 不回显完整值：掩码提示已配置；输入框留空表示保持不变
     var keyMask = document.getElementById('j10-key-mask');
     if (CONFIG.apiKey) {
-      keyMask.textContent = '当前已配置：sk-****' + CONFIG.apiKey.slice(-4);
+      keyMask.textContent = '当前已配置：' + CONFIG.apiKey.slice(0, 5) + '****' + CONFIG.apiKey.slice(-4);
     } else {
       keyMask.textContent = '未配置 Key，AI 解读不可用';
     }
@@ -452,15 +640,22 @@
     document.getElementById('j10-save').onclick = function () {
       CONFIG.removeAds = document.getElementById('j10-opt-ads').checked;
       CONFIG.enableAI = document.getElementById('j10-opt-ai').checked;
+      // provider 切换：加载/保存对应 provider 的 key 与模型
+      CONFIG.provider = document.getElementById('j10-provider').value;
+      if (!PROVIDERS[CONFIG.provider]) CONFIG.provider = 'deepseek';
+      var prov = PROVIDERS[CONFIG.provider] || PROVIDERS.deepseek;
       // 输入框留空表示保持原 key 不变
       var newKey = document.getElementById('j10-key').value.trim();
       if (newKey) CONFIG.apiKey = newKey;
-      CONFIG.model = document.getElementById('j10-model').value.trim() || CONFIG.model;
+      else CONFIG.apiKey = GM_getValue('j10_key_' + CONFIG.provider, '') || '';
+      CONFIG.model = document.getElementById('j10-model').value.trim() ||
+        (prov.models[0] || CONFIG.model);
       CONFIG.reasoningEffort = document.getElementById('j10-effort').value;
       GM_setValue('j10_removeAds', CONFIG.removeAds);
       GM_setValue('j10_enableAI', CONFIG.enableAI);
-      GM_setValue('j10_apiKey', CONFIG.apiKey);
-      GM_setValue('j10_model', CONFIG.model);
+      GM_setValue('j10_provider', CONFIG.provider);
+      GM_setValue('j10_key_' + CONFIG.provider, CONFIG.apiKey);
+      GM_setValue('j10_model_' + CONFIG.provider, CONFIG.model);
       GM_setValue('j10_effort', CONFIG.reasoningEffort);
       if (!CONFIG.removeAds) {
         var css = document.getElementById('jin10-cleaner-css');
@@ -479,10 +674,10 @@
     document.getElementById('j10-close').onclick = function () {
       menu.remove();
     };
-    // 清空 Key：立即生效并更新掩码提示
+    // 清空 Key：仅清当前 provider 的 key，立即生效并更新掩码提示
     document.getElementById('j10-clear-key').onclick = function () {
       CONFIG.apiKey = '';
-      GM_setValue('j10_apiKey', '');
+      GM_setValue('j10_key_' + CONFIG.provider, '');
       document.getElementById('j10-key').value = '';
       document.getElementById('j10-key-mask').textContent = '未配置 Key，AI 解读不可用';
     };

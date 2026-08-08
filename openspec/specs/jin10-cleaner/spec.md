@@ -61,12 +61,26 @@
 
 #### Scenario: 未配置 API Key
 
-- **WHEN** 用户点击 `AI` 按钮且设置中无 API Key
-- **THEN** 按钮下方提示"未配置 API Key：点击右上角 ⚙️AI 齿轮"，不发起请求
+- **WHEN** 用户点击 `AI` 按钮且当前供应商未配置 API Key
+- **THEN** 按钮下方提示"未配置 API Key：点击右下角 ⚙ 齿轮，在设置中为「<供应商名>」填入 API Key"，不发起请求
+
+### ADDED Requirement: 多 LLM 供应商
+
+脚本 SHALL 通过 `PROVIDERS` 配置表支持多 LLM 供应商，设置面板提供"LLM 供应商"下拉（预设：DeepSeek / OpenCode Go / OpenAI / Anthropic Claude / Kimi / 智谱 GLM / MiniMax / 小米 MiMo）。API Key 与模型按供应商独立存储（`j10_key_<id>` / `j10_model_<id>`，旧 `j10_apiKey`/`j10_model` 自动迁移为 deepseek 的配置）。AI 请求按供应商协议分发：OpenAI 兼容（`/chat/completions` + Bearer）或 Anthropic Messages（`/messages` + `x-api-key` + `anthropic-version`）。思考参数按供应商模式构造（DeepSeek `thinking:{type,reasoning_effort}` / OpenAI `reasoning_effort` / Anthropic `thinking:{type,budget_tokens}` / 其余不发送）。解读缓存键包含供应商与模型，切换后不串缓存。
+
+#### Scenario: 切换供应商并各自保存配置
+
+- **WHEN** 用户在设置面板切换"LLM 供应商"下拉并保存 API Key / 模型
+- **THEN** 该供应商的 Key 与模型独立持久化；切换回时掩码与模型列表联动恢复；AI 按钮使用当前供应商的 Key 与模型发起请求
+
+#### Scenario: Anthropic 响应解析
+
+- **WHEN** 使用 Anthropic 协议且响应 `content` 数组包含 thinking block 与 text block
+- **THEN** 取最后一个 `type==='text'` block 作为解读内容
 
 ### ADDED Requirement: 设置入口（顶部导航）
 
-脚本 SHALL 在页面顶部导航（`.left-navs`）"数据"链接右侧注入粗体 `⚙️AI` 入口（`<span>`，15px，font-weight 700，与导航项同行等高 52px）。点击 SHALL 在其正下方展开设置面板（`document.body` + `position: fixed`，避开导航容器 `overflow: hidden` 裁切），内容包含：广告减负开关、AI 解读开关、DeepSeek API Key（密码框，掩码回显 `sk-****xxxx`，留空保持原值，可一键清空）、模型输入框、思考强度下拉。
+脚本 SHALL 在页面顶部导航（`.left-navs`）"数据"链接右侧注入粗体 `⚙️AI` 入口（`<span>`，15px，font-weight 700，与导航项同行等高 52px）。点击 SHALL 在其正下方展开设置面板（`document.body` + `position: fixed`，避开导航容器 `overflow: hidden` 裁切），内容包含：广告减负开关、AI 解读开关、LLM 供应商下拉（8 家预设）、按当前供应商显示的 API Key（密码框，掩码回显 `****xxxx`，留空保持原值，可一键清空，标签含供应商官网链接）、模型输入框（datalist 预设 + 手动输入）、思考强度下拉。
 
 - **滚动时**：菜单自动关闭（capture 阶段 scroll 监听）
 - **入口被站点重渲染删除时**：MutationObserver 自动重建入口并清理孤儿菜单
@@ -84,5 +98,6 @@
 ## Requirements Traceability
 
 - 广告减负：金十 4 类元素全部清除；汇通 kx 广告选择器命中即清除；财联社 5 处（横幅 1 + 二维码 4）全部清除（Playwright + Edge headless 实测）
-- AI 解读：金十 29/29 快讯按钮注入；汇通 180/204（数据快讯等无正文条目标记跳过）；财联社 20/20 电报按钮注入；真实 API 调用成功（`finish_reason: stop`，单条约 430 token）
+- AI 解读：金十 29/29 快讯按钮注入；汇通 180/204（数据快讯等无正文条目标记跳过）；财联社 20/20 电报按钮注入；DeepSeek 真实 API 调用成功（`finish_reason: stop`，单条约 430 token）
+- 多供应商：8 家预设下拉、切换联动（key 掩码/模型 datalist）、deepseek 请求 payload 含 `thinking:{type,reasoning_effort}`、anthropic 请求 `x-api-key`+`anthropic-version`+`thinking:{type,budget_tokens}`、响应 content 数组取 text block（Playwright + Edge 注入 GM stub 实测）
 - 设置入口：金十/汇通导航注入可用；财联社 fixed 按钮回退可用；菜单可见性、toggle 循环实测通过
