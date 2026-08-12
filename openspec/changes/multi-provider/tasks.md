@@ -41,3 +41,10 @@
 - **Priority:** High
 - **Description:** 聚焦 key 输入框时浏览器自动滚动（scrollIntoView）先于 focus 事件触发，menuHasFocus 仍为 false，scroll capture 监听误关菜单。修复：滚动关闭延迟一帧（setTimeout 0）再检查焦点；focusout 用 relatedTarget 判断菜单内焦点切换；新增点击菜单外关闭兜底
 - **Acceptance Criteria:** 真机（Edge+暴力猴）验证：切 OpenCode Go → 聚焦 key → 滚动，菜单保持（M=true）；失焦后滚动仍可关闭菜单
+
+## Task: 适配华尔街见闻（v3.8.0）
+
+- **Status:** Done
+- **Priority:** High
+- **Description:** 新增 wallstreetcn.com 站点适配：itemSelector 覆盖普通快讯（div.live-item）与日历类快讯（div.calendarlive-item）；flex 布局下 AI 按钮通过新增 btnAnchorSelector（.live-item_main / .calendarlive-item_main-container）锚入正文容器，避免破坏时间列宽度；广告移除 .download（APP/公众号二维码）/ .wrapper.service（客服浮窗）/ .append（广告容器），保留行情/日历侧栏；设置入口回退 fixed ⚙
+- **Acceptance Criteria:** Playwright 验证：20/20 条目挂载按钮且全部位于锚点容器内；广告元素移除、功能侧栏保留；真机实测快讯流正常

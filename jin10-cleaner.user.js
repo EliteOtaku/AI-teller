@@ -1,14 +1,15 @@
 // ==UserScript==
 // @name         财经快讯净化 + AI 解读（多 LLM）
 // @namespace    jin10-cleaner
-// @version      3.7.1
-// @description  金十数据 / 汇通网 / 财联社：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek/OpenCode Go/OpenAI/Claude/Kimi/GLM/MiniMax/MiMo 多供应商切换，点击按钮才调用）。不触碰任何付费内容。
+// @version      3.8.0
+// @description  金十数据 / 汇通网 / 财联社 / 华尔街见闻：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek/OpenCode Go/OpenAI/Claude/Kimi/GLM/MiniMax/MiMo 多供应商切换，点击按钮才调用）。不触碰任何付费内容。
 // @match        https://www.jin10.com/*
 // @match        https://xnews.jin10.com/*
 // @match        https://rili.jin10.com/*
 // @match        https://www.fx678.com/kx*
 // @match        https://www.cls.cn/telegraph*
 // @match        https://cls.cn/telegraph*
+// @match        https://wallstreetcn.com/live*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -191,6 +192,26 @@
       flashDropSelectors: 'span[style*="rgb(222, 4, 34)"], a[href^="/subject/"], a[href^="/detail/"], .share-box, canvas, .c-b.f-s-12',
       textIncludeSelector: 'div[style*="white-space: pre-wrap"]',
       // 导航不适合挂载 → 回退 fixed ⚙ 按钮（不配置 navSelector）
+      useFixedGear: true
+    },
+
+    // ---------- 华尔街见闻 7x24 快讯（Vue 客户端渲染，flex 布局） ----------
+    'wallstreetcn.com': {
+      adCss: [
+        '.download { display: none !important; }',
+        '.wrapper.service { display: none !important; }',
+        '.append { display: none !important; }'
+      ],
+      adSelectors: ['.download', '.wrapper.service', '.append'],
+      // 条目：普通快讯 + 日历类快讯（class 为独立 token，不会被 div.live-item 误命中）
+      itemSelector: 'div.live-item, div.calendarlive-item',
+      timeSelector: 'time.live-item_created',
+      // 排除时间/展开按钮/三点菜单/后台编辑链接/图标/日历条目的概率预测与数据解读链接
+      flashDropSelectors: 'time.live-item_created, .live-item_more_btn, .menu.item-menu, a[href*="juicy.wscn.net"], svg, .calendarlive-item_content-probs, .calendarlive-item_content-predict, .calendarlive-item_probs_detail',
+      // 按钮锚点：live-item 是 flex 行（time 固定 60px），直接插 time 后会挤占正文，
+      // 改为追加到 main 内部末尾；日历条目锚到其内容容器
+      btnAnchorSelector: '.live-item_main, .calendarlive-item_main-container',
+      // 顶栏 sticky 且已有站内设置按钮 → 回退 fixed ⚙ 按钮
       useFixedGear: true
     }
   };
@@ -450,9 +471,13 @@
       });
     };
     wrap.appendChild(btn);
-    // 固定在时间正下方：插到时间元素之后紧贴（找不到时间元素则插到条目内容之前）
+    // 按钮位置：①站点配置了锚点（btnAnchorSelector，如 flex 布局站点）→ 追加到锚点末尾；
+    // ②否则固定在时间正下方：插到时间元素之后紧贴（找不到时间元素则插到条目内容之前）
     var timeEl = item.querySelector(SITE.timeSelector);
-    if (timeEl && timeEl.nextSibling) {
+    var btnAnchor = SITE.btnAnchorSelector ? item.querySelector(SITE.btnAnchorSelector) : null;
+    if (btnAnchor) {
+      btnAnchor.appendChild(wrap);
+    } else if (timeEl && timeEl.nextSibling) {
       timeEl.parentNode.insertBefore(wrap, timeEl.nextSibling);
     } else if (timeEl) {
       timeEl.parentNode.appendChild(wrap);

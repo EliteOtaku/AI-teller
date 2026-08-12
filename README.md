@@ -1,6 +1,6 @@
 # AI-teller
 
-财经快讯增强用户脚本 + 相关工具。支持 **金十数据 / 汇通网 / 财联社** 三站 7x24 快讯流。
+财经快讯增强用户脚本 + 相关工具。支持 **金十数据 / 汇通网 / 财联社 / 华尔街见闻** 四站 7x24 快讯流。
 
 ## 项目内容
 
@@ -13,6 +13,7 @@
 | 金十数据 | www.jin10.com（含 xnews 快讯 / rili 日历） | ✅ | ✅ | 顶部导航 ⚙️AI |
 | 汇通网 | www.fx678.com/kx（7x24 快讯） | ✅ | ✅ | 顶部导航 ⚙️AI |
 | 财联社 | www.cls.cn/telegraph（7x24 电报） | ✅ | ✅ | 右下角 ⚙️AI 按钮 |
+| 华尔街见闻 | wallstreetcn.com/live（7x24 快讯，含日历类条目） | ✅ | ✅ | 右下角 ⚙️AI 按钮 |
 
 **功能：**
 
@@ -34,7 +35,7 @@
 
 > 模型列表为预设，可在设置面板手动输入任意模型 ID。
 
-**设置入口：** 金十/汇通为顶部导航粗体 **⚙️AI**，财联社为右下角圆形 **⚙️AI** 按钮，点击弹出设置面板（广告减负开关、AI 解读开关、LLM 供应商下拉、API Key、模型、思考强度）。
+**设置入口：** 金十/汇通为顶部导航粗体 **⚙️AI**，财联社/华尔街见闻为右下角圆形 **⚙️AI** 按钮，点击弹出设置面板（广告减负开关、AI 解读开关、LLM 供应商下拉、API Key、模型、思考强度）。
 
 **安装：**
 
@@ -51,9 +52,9 @@
 
 ## 技术要点
 
-- 多站架构：`PAGE_CONFIGS` 配置表按 hostname 后缀分发（金十 `jin10.com` / 汇通 `fx678.com` / 财联社 `cls.cn`），每站独立配置广告选择器、条目选择器、时间锚点、文本提取规则与设置入口方式；未匹配站点完全静默
+- 多站架构：`PAGE_CONFIGS` 配置表按 hostname 后缀分发（金十 `jin10.com` / 汇通 `fx678.com` / 财联社 `cls.cn` / 华尔街见闻 `wallstreetcn.com`），每站独立配置广告选择器、条目选择器、时间锚点、文本提取规则与设置入口方式；未匹配站点完全静默
 - 多供应商架构：`PROVIDERS` 配置表 + 双协议分发器（OpenAI 兼容 `/chat/completions` + Bearer / Anthropic Messages `/messages` + `x-api-key` + `anthropic-version`）；思考参数按供应商模式构造（DeepSeek `thinking:{type,reasoning_effort}` / OpenAI `reasoning_effort` / Anthropic `thinking:{type,budget_tokens}` / 其余不发送）；Key 与模型按供应商独立存储
-- 金十为 Vue SPA（scoped 样式 `data-v-*` 复用）、汇通为服务端渲染 + socket 追加、财联社为 Next.js 客户端渲染（Tailwind 原子类，选择器限定 `.w-894` 作用域防误命中）；三者均由 body 级 MutationObserver 统一兜底
+- 金十为 Vue SPA（scoped 样式 `data-v-*` 复用）、汇通为服务端渲染 + socket 追加、财联社为 Next.js 客户端渲染（Tailwind 原子类，选择器限定 `.w-894` 作用域防误命中）、华尔街见闻为 Vue 客户端渲染（flex 布局条目，AI 按钮通过 `btnAnchorSelector` 锚入正文容器避免破坏时间列宽度）；均由 body 级 MutationObserver 统一兜底
 - 菜单挂载于 `document.body` + `position: fixed` 定位，规避站点导航容器 `overflow: hidden` 裁切与前端框架重渲染删除；贴近视口底部时向上展开
 - 思考模型必须给足 `max_tokens`（实测 200 会被思考 token 吃光预算导致空响应，设为 4000）
 
