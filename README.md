@@ -24,8 +24,8 @@
 
 | 供应商 | 协议 | 端点 | 模型示例 |
 |---|---|---|---|
-| DeepSeek | OpenAI 兼容 | api.deepseek.com | deepseek-v4-flash / pro |
-| OpenCode Go | OpenAI 兼容 | opencode.ai/zen/go/v1 | deepseek-v4-flash / kimi-k3 / glm-5.2 / mimo-v2.5 / minimax-m3 / grok-4.5 / hy3 等 |
+| DeepSeek | OpenAI 兼容 | api.deepseek.com | deepseek-flash |
+| OpenCode Go | OpenAI 兼容 | opencode.ai/zen/go/v1 | deepseek-flash / kimi-k3 / glm-5.2 / mimo-v2.5 / minimax-m3 / grok-4.5 / hy3 等 |
 | OpenAI | OpenAI 兼容 | api.openai.com/v1 | gpt-4o / gpt-4.1 / o3-mini |
 | Anthropic Claude | Anthropic Messages | api.anthropic.com/v1 | claude-opus-4-6 / sonnet / haiku |
 | Kimi (Moonshot) | OpenAI 兼容 | api.moonshot.cn/v1 | kimi-k2 / kimi-latest |

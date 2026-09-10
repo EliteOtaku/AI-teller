@@ -41,7 +41,7 @@
 
 ### ADDED Requirement: AI 解读（点击触发）
 
-脚本 SHALL 在每条免费公开快讯的时间元素（`.item-time`）正下方注入一个小号 `AI` 按钮（约 21×16px，粗体 10px）。点击按钮 SHALL 调用 DeepSeek API（`https://api.deepseek.com/chat/completions`，模型 `deepseek-v4-flash`）为该快讯生成解读（事件是什么 / 市场影响 / 后续信号），结果在按钮下方展开；再次点击同一按钮 SHALL 收起解读（toggle，展开时按钮高亮为蓝底）。
+脚本 SHALL 在每条免费公开快讯的时间元素（`.item-time`）正下方注入一个小号 `AI` 按钮（约 21×16px，粗体 10px）。点击按钮 SHALL 调用 DeepSeek API（`https://api.deepseek.com/chat/completions`，模型 `deepseek-flash`）为该快讯生成解读（事件是什么 / 市场影响 / 后续信号），结果在按钮下方展开；再次点击同一按钮 SHALL 收起解读（toggle，展开时按钮高亮为蓝底）。
 
 - **仅点击才调用**：加载页面不得发起任何 API 请求
 - **缓存**：解读结果按「快讯文本 + 思考档位」缓存于 localStorage，重复查看不消耗额度

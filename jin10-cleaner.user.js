@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         财经快讯净化 + AI 解读（多 LLM）
 // @namespace    jin10-cleaner
-// @version      3.8.0
+// @version      3.8.1
 // @description  金十数据 / 汇通网 / 财联社 / 华尔街见闻：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek/OpenCode Go/OpenAI/Claude/Kimi/GLM/MiniMax/MiMo 多供应商切换，点击按钮才调用）。不触碰任何付费内容。
 // @match        https://www.jin10.com/*
 // @match        https://xnews.jin10.com/*
@@ -38,8 +38,8 @@
     enableAI: true,
     // 当前 LLM 供应商（对应 PROVIDERS 的 key）
     provider: 'deepseek',
-    // 模型（默认 deepseek-v4-flash）
-    model: 'deepseek-v4-flash',
+    // 模型（默认 deepseek-flash，2026-09 官方更名，原 deepseek-v4-flash 已由 V4.1-Flash 接管）
+    model: 'deepseek-flash',
     // 思考强度：disabled / low / high / max（仅支持思考参数的 provider 生效）
     reasoningEffort: 'low',
     // 单条解读最大输出 token（思考模式会消耗大量 token，必须给足余量）
@@ -58,12 +58,12 @@
     deepseek: {
       name: 'DeepSeek', protocol: 'openai', baseURL: 'https://api.deepseek.com',
       keyPlaceholder: 'sk-...', keyHint: 'platform.deepseek.com', thinking: 'deepseek',
-      models: ['deepseek-v4-flash', 'deepseek-v4-pro']
+      models: ['deepseek-flash']
     },
     opencodego: {
       name: 'OpenCode Go', protocol: 'openai', baseURL: 'https://opencode.ai/zen/go/v1',
       keyPlaceholder: 'oc-...', keyHint: 'opencode.ai/auth', thinking: 'none',
-      models: ['deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k3', 'kimi-k2.7-code',
+      models: ['deepseek-flash', 'kimi-k3', 'kimi-k2.7-code',
         'kimi-k2.6', 'glm-5.2', 'glm-5.1', 'mimo-v2.5', 'mimo-v2.5-pro',
         'minimax-m3', 'minimax-m2.7', 'grok-4.5', 'hy3']
     },
@@ -121,6 +121,10 @@
   if (legacyModel && !GM_getValue('j10_model_deepseek', '')) {
     GM_setValue('j10_model_deepseek', legacyModel);
     GM_setValue('j10_model', '');
+  }
+  // 模型更名迁移：deepseek-v4-flash → deepseek-flash（旧名仍兼容可调，但已由 V4.1-Flash 提供服务）
+  if (GM_getValue('j10_model_deepseek', '') === 'deepseek-v4-flash') {
+    GM_setValue('j10_model_deepseek', 'deepseek-flash');
   }
   CONFIG.provider = GM_getValue('j10_provider', CONFIG.provider);
   if (!PROVIDERS[CONFIG.provider]) CONFIG.provider = 'deepseek';
