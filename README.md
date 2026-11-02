@@ -17,7 +17,7 @@
 
 **功能：**
 
-1. **广告减负**（默认开启）：按站点分别移除 App 下载推广、二维码推广、悬浮客服、快讯流内嵌广告、开屏广告等
+1. **广告减负**（默认开启）：按站点分别移除 App 下载推广、二维码推广、悬浮客服、快讯流内嵌广告、开屏广告等；金十首页另覆盖 2026-11 改版新增的顶部横幅广告（`.top-poster`）、右栏「旗下产品」推广卡（`.products`）、合作媒体课程卡（`.course-entry`）、VIP 引导弹层（`.jin-vip-open-tip`）、页脚下载二维码（`.bottom-right`），并以 `a:has(> .ad-tag)` 作为站点统一「广告」角标组件的通用兜底
 2. **AI 解读**（点击快讯旁的 `AI` 按钮才调用）：调用大模型为每条免费公开快讯生成解读（事件是什么 / 市场影响 / 后续信号），思考强度可调（disabled / low / high / max）。**支持 8 家 LLM 供应商下拉切换**，Key 与模型各自独立保存
 
 **支持的 LLM 供应商：**
@@ -56,6 +56,7 @@
 - 多供应商架构：`PROVIDERS` 配置表 + 双协议分发器（OpenAI 兼容 `/chat/completions` + Bearer / Anthropic Messages `/messages` + `x-api-key` + `anthropic-version`）；思考参数按供应商模式构造（DeepSeek `thinking:{type,reasoning_effort}` / OpenAI `reasoning_effort` / Anthropic `thinking:{type,budget_tokens}` / 其余不发送）；Key 与模型按供应商独立存储
 - 金十为 Vue SPA（scoped 样式 `data-v-*` 复用）、汇通为服务端渲染 + socket 追加、财联社为 Next.js 客户端渲染（Tailwind 原子类，选择器限定 `.w-894` 作用域防误命中）、华尔街见闻为 Vue 客户端渲染（flex 布局条目，AI 按钮通过 `btnAnchorSelector` 锚入正文容器避免破坏时间列宽度）；均由 body 级 MutationObserver 统一兜底
 - 菜单挂载于 `document.body` + `position: fixed` 定位，规避站点导航容器 `overflow: hidden` 裁切与前端框架重渲染删除；贴近视口底部时向上展开
+- 金十首页广告位多为 Vue 轮播组件（`.top-poster` / `.products` 每隔几秒切换创意）：这类节点只用 CSS `display:none` 隐藏、**不进 `adSelectors`**，避免 `remove()` 之后组件 patch 对已脱离文档的节点 `insertBefore` 抛错、连带破坏整块重渲染；静态容器（`.download-container` / `.desktop-tip` 等）才做 DOM 移除
 - 思考模型必须给足 `max_tokens`（实测 200 会被思考 token 吃光预算导致空响应，设为 4000）
 
 ## License

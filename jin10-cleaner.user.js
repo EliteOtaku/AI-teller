@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         财经快讯净化 + AI 解读（多 LLM）
 // @namespace    jin10-cleaner
-// @version      3.8.1
+// @version      3.8.2
 // @description  金十数据 / 汇通网 / 财联社 / 华尔街见闻：①广告减负（去广告/App推广/悬浮窗）②AI 解读（DeepSeek/OpenCode Go/OpenAI/Claude/Kimi/GLM/MiniMax/MiMo 多供应商切换，点击按钮才调用）。不触碰任何付费内容。
 // @match        https://www.jin10.com/*
 // @match        https://xnews.jin10.com/*
@@ -145,7 +145,17 @@
         '.qr-slide, .common-nav-slide { display: none !important; }',
         '.desktop-tip { display: none !important; }',
         '.jin-plus-open-dialog, .jin-plus-open-dialog__container { display: none !important; }',
-        '.poster, .poster-container, .poster-wrap, [class*="poster-layer"] { display: none !important; }'
+        '.poster, .poster-container, .poster-wrap, [class*="poster-layer"] { display: none !important; }',
+        // —— 2026-11 首页改版新增推广位 ——
+        // 这些只做 CSS 隐藏、不进 adSelectors：.top-poster / .products 由 Vue 轮播驱动，
+        // 直接 remove() 会让后续 patch 对已脱离文档的节点 insertBefore 而抛错，破坏整块重渲染。
+        '.top-poster { display: none !important; }',      // 顶部横幅广告（导航下方，创意轮播 + 「广告」角标）
+        '.products { display: none !important; }',        // 右栏「旗下产品」推广卡（APP / 电脑版 / 超级行情 / TradingHero / 开放平台 …）
+        '.course-entry { display: none !important; }',    // 右栏合作媒体推广卡（Better News · 高见）
+        '.jin-vip-open-tip { display: none !important; }',// VIP 引导弹层（按日查询快讯触发）
+        '.bottom-right { display: none !important; }',    // 页脚 App 下载二维码
+        // 通用兜底：站点统一「广告」角标组件，其父节点即广告位（新广告位复用时自动覆盖）
+        'a:has(> .ad-tag) { display: none !important; }'
       ],
       adSelectors: ['.download-container, .download-bar', '.qr-slide, .common-nav-slide',
         '.desktop-tip', '.jin-plus-open-dialog'],

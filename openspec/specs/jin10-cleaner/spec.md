@@ -32,12 +32,22 @@
 
 脚本 SHALL 移除页面中的推广与广告元素，包括：App 下载推广条（`.download-container`）、二维码推广（`.qr-slide`）、桌面推广弹窗（`.desktop-tip`）、开通 Plus 弹窗（`.jin-plus-open-dialog`）、开屏广告（`jin-header` 的 `poster-*` 属性）。
 
+2026-11 金十首页改版后新增的推广位 SHALL 一并覆盖：顶部横幅广告（`.top-poster`，导航下方创意轮播，带「广告」角标与关闭按钮）、右栏「旗下产品」推广卡（`.products`，含 APP / 电脑版 / 超级行情图表 / TradingHero / 金十期货 / 开放平台等入口与轮播创意）、右栏合作媒体课程卡（`.course-entry`，Better News · 高见）、VIP 引导弹层（`.jin-vip-open-tip`，按日查询快讯时触发）、页脚 App 下载二维码（`.bottom-right`）。
+
 - **边界**：不得移除或修改正常功能元素（快讯列表、导航、视频弹窗等合法对话框）
+- **边界**：不得触碰付费内容——`普通版/增强版`切换（`.flash-plus-content-switch`）、VIP 快讯条目（`.jin-flash-item.is-vip`）、登录闸门（`.login-mask`）与编辑内容（`.recommend-article`）保留
+- **实现约束**：Vue 轮播驱动的广告位（`.top-poster` / `.products`）SHALL 仅用 CSS `display:none` 隐藏、不进入 `adSelectors`；对已脱离文档的节点执行 `remove()` 会让组件 patch 的 `insertBefore` 抛错并破坏整块重渲染
+- **通用兜底**：站点统一「广告」角标组件（`.ad-tag`）SHALL 通过 `a:has(> .ad-tag)` 覆盖，新广告位复用该组件时无需改脚本
 
 #### Scenario: 打开金十首页后推广元素被清除
 
 - **WHEN** 用户加载 https://www.jin10.com/
-- **THEN** 上述 4 类推广/弹窗元素在 DOM 中不存在，快讯列表完整可用
+- **THEN** 上述 9 类推广/弹窗元素均不可见（旧 4 类在 DOM 中不存在，新 5 类为 `display:none` 且占位尺寸为 0），右栏推广卡移除后「热门文章」「财经日历」上移补齐、无空白占位，快讯列表与 AI 按钮完整可用
+
+#### Scenario: 新增选择器不误伤子域页面
+
+- **WHEN** 用户加载 https://xnews.jin10.com/ 或 https://rili.jin10.com/
+- **THEN** `.products` / `.course-entry` / `.top-poster` / `.jin-vip-open-tip` 在这些页面不存在（实测 0 命中），仅页脚 `.bottom-right` 二维码被清除，正文、日历表格与快讯列表不受影响
 
 ### ADDED Requirement: AI 解读（点击触发）
 
@@ -97,7 +107,7 @@
 
 ## Requirements Traceability
 
-- 广告减负：金十 4 类元素全部清除；汇通 kx 广告选择器命中即清除；财联社 5 处（横幅 1 + 二维码 4）全部清除（Playwright + Edge headless 实测）
+- 广告减负：金十首页旧 4 类元素 DOM 移除 + 2026-11 改版新增 5 类（`.top-poster` / `.products` / `.course-entry` / `.jin-vip-open-tip` / `.bottom-right`）`display:none` 且占位尺寸归零、右栏无空白占位；xnews / rili 子域对新增选择器 0 命中、无误伤；汇通 kx 广告选择器命中即清除；财联社 5 处（横幅 1 + 二维码 4）全部清除（Playwright + Edge headless 实测）
 - AI 解读：金十 29/29 快讯按钮注入；汇通 180/204（数据快讯等无正文条目标记跳过）；财联社 20/20 电报按钮注入；DeepSeek 真实 API 调用成功（`finish_reason: stop`，单条约 430 token）
 - 多供应商：8 家预设下拉、切换联动（key 掩码/模型 datalist）、deepseek 请求 payload 含 `thinking:{type,reasoning_effort}`、anthropic 请求 `x-api-key`+`anthropic-version`+`thinking:{type,budget_tokens}`、响应 content 数组取 text block（Playwright + Edge 注入 GM stub 实测）
 - 设置入口：金十/汇通导航注入可用；财联社 fixed 按钮回退可用；菜单可见性、toggle 循环实测通过
